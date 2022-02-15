@@ -39,6 +39,16 @@ export function createCode(nInputs) {
         }
     }
 
+    function saveP() {
+        for (let i=t; i<2*t; i++) {
+            for (let j=t; j<2*t; j++) {
+                C.push(toHex256(P[t-2][i][j]));
+                C.push((1+i*t+j)*32);
+                C.mstore();
+            }
+        }
+    }
+
     function ark(r) {   // st, q
         for (let i=0; i<t; i++) {
             C.dup(t); // q, st, q
@@ -116,6 +126,7 @@ export function createCode(nInputs) {
     C.label("start");
 
     saveM();
+    saveP();
 
     C.push("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");  // q
 
@@ -130,6 +141,56 @@ export function createCode(nInputs) {
 
     C.push(0);
 
+    // NEW
+    ark(0);
+    for (let r=0; r<nRoundsF/2 - 1; r++) {
+        for (let j=0; j<t; j++) {
+            sigma(j);
+        }
+
+        ark((r + 1))
+
+        const strLabel = "aferMix"+r;
+        C._pushLabel(strLabel);
+        C.push(0);
+        C.mstore();
+        C.jmp("mix");
+        C.label(strLabel);
+    }
+
+    for (let j = 0; j<t; j++) {
+        sigma(j);
+    }
+
+    ark(nRoundsF/2 + 1);
+
+    const strLabel = "aferMix"+nRoundsF/2;
+    C._pushLabel(strLabel);
+    C.push(0);
+    C.mstore();
+    C.jmp("mix");
+    C.label(strLabel);
+
+    for (let r = 0; r < nRoundsP; r++) {
+        sigma(0);
+        ark(0);
+    }
+
+    // for (let r = 0; r < nRoundsP; r++) {
+    //     state[0] = pow5(state[0]);
+    //     state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r]);
+
+
+    //     const s0 = state.reduce((acc, a, j) => {
+    //         return F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+    //     }, F.zero);
+    //     for (let k=1; k<t; k++) {
+    //         state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]   ));
+    //     }
+    //     state[0] =s0;
+    // }
+
+    // OLD
     for (let i=0; i<nRoundsF+nRoundsP; i++) {
         ark(i);
         if ((i<nRoundsF/2) || (i>=nRoundsP+nRoundsF/2)) {
