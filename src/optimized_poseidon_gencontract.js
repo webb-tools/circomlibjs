@@ -7,9 +7,14 @@ import { utils } from "ffjavascript";
 const { unstringifyBigInts } = utils;
 import ethers from "ethers";
 
-import poseidonConstants from "./poseidon_constants.js";
+import poseidonConstants from "./poseidon_constants_opt.js";
 
-const { C:K, M } = unstringifyBigInts(poseidonConstants);
+const opt = unstringifyBigInts(poseidonConstants);
+
+const K = opt.C[t - 2];
+const S = opt.S[t - 2];
+const M = opt.M[t - 2];
+const P = opt.P[t - 2];
 
 const N_ROUNDS_F = 8;
 const N_ROUNDS_P = [56, 57, 56, 60, 60, 63, 64, 63];
