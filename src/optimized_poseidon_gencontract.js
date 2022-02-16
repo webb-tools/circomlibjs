@@ -55,17 +55,6 @@ export function createCode(nInputs) {
             C.pop();
         }
     }
-    function arc(r) {   // st, q
-        C.push(0)
-        for (let i=0; i<t; i++) {
-            C.dup(t+1); // q, 0, st, q
-            // C.push(toHex256(S[(t*2-1]*r+j));  // K, q, st, q
-            C.push(toHex256(S[(t*2-1)*r+i]));  // K, q, st, q
-            C.dup(2+i); // st[i], K, q, st, q
-            C.addmod(); // newSt[i], st, q
-            C.pop();
-        }
-    }
 
     function sigma(p) {
         // sq, q
@@ -114,38 +103,6 @@ export function createCode(nInputs) {
         C.jmp();
     }
 
-    function mif() {
-        C.label("mif");
-        for (let i=0; i<t; i++) {
-            for (let j=0; j<t; j++) {
-                if (j==0) {
-                    C.dup(i+t);      // q, newSt, oldSt, q
-                    C.push((1+i*t+j)*32);
-                    C.mload();      // M, q, newSt, oldSt, q
-                    C.dup(2+i+j);    // oldSt[j], M, q, newSt, oldSt, q
-                    C.mulmod();      // acc, newSt, oldSt, q
-                } else {
-                    C.dup(1+i+t);    // q, acc, newSt, oldSt, q
-                    C.push((1+i*t+j)*32);
-                    C.mload();      // m[i, j], q, acc, newSt, oldSt, q
-                    C.dup(3+i+j);    // oldSt[j], M, q, acc, newSt, oldSt, q
-                    C.mulmod();      // aux, acc, newSt, oldSt, q
-                    C.dup(2+i+t);    // q, aux, acc, newSt, oldSt, q
-                    C.swap(2);       // acc, aux, q, newSt, oldSt, q
-                    C.addmod();      // acc, newSt, oldSt, q
-                }
-            }
-        }
-        for (let i=0; i<t; i++) {
-            C.swap((t -i) + (t -i-1));
-            C.pop();
-        }
-        C.push(0);
-        C.mload(); //label
-        C.jmp();
-    }
-
-
     // Check selector
     C.push("0x0100000000000000000000000000000000000000000000000000000000");
     C.push(0);
@@ -177,7 +134,6 @@ export function createCode(nInputs) {
     }
 
     C.push(0);
-
 
     // first full rounds
     ark(0);
@@ -227,47 +183,18 @@ export function createCode(nInputs) {
         C.pop(); // st, q
 
         // should be right until here
-        // F.mul(S[(t*2-1)*r+j], a)
-        // F.mul(state[0], S[(t*2-1)*r+t+k-1]));
 
-            // const s0 = state.reduce((acc, a, j) => {
-            //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
-            //     console.log("hey:)
-            //     return val
-            // }, F.zero);
-            // for (let k=1; k<t; k++) {
-            //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]));
-            // }
-            // state[0] =s0;
-
-
-        // multiplication per F
-
+        // TODO replicate behaviour in assembly
         // const s0 = state.reduce((acc, a, j) => {
-        //     return F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+        //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+        //     console.log("hey:)
+        //     return val
         // }, F.zero);
-        
-        // Adding constants
-        
         // for (let k=1; k<t; k++) {
-        //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]   ));
+        //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]));
         // }
+        // state[0] =s0;
     }
-
-    // for (let r = 0; r < nRoundsP; r++) {
-    //     state[0] = pow5(state[0]);
-    //     state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r]);
-    //
-    //
-    //     const s0 = state.reduce((acc, a, j) => {
-    //         return F.add(acc, F.mul(S[(t*2-1)*r+j], a));
-    //     }, F.zero);
-    //     for (let k=1; k<t; k++) {
-    //         state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]   ));
-    //     }
-    //     state[0] =s0;
-    // }
-
 
     // Old
     for (let i=0; i<nRoundsF+nRoundsP; i++) {

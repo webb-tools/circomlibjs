@@ -4,6 +4,8 @@ const assert = chai.assert;
 import buildPoseidon from "../src/poseidon.js";
 import buildPoseidonSlow from "../src/poseidon_slow.js";
 
+import Benchmark from 'benchmark';
+
 describe("Poseidon test", function () {
     let poseidon;
     let poseidonSlow;
@@ -29,5 +31,22 @@ describe("Poseidon test", function () {
 
         const res3 = poseidonSlow([1,2,3,4]);
         assert(poseidonSlow.F.eq(poseidonSlow.F.e("0x299c867db6c1fdd79dcefa40e4510b9837e60ebb1ce0663dbaa525df65250465"), res3));
+    });
+
+    it("Should benchmark", async () => {
+        var suite = new Benchmark.Suite;
+        suite.add('poseidon_slow', () => {
+            poseidonSlow([1,2]);
+        })
+        .add('poseidon optimized', () => {
+            poseidon([1,2]);
+        })
+        .on('cycle', function(event) {
+            console.log(String(event.target));
+        })
+        .on('complete', function() {
+            console.log('Fastest is ' + this.filter('fastest').map('name'));
+        })
+        .run({ async: true });
     });
 });
