@@ -55,6 +55,17 @@ export function createCode(nInputs) {
             C.pop();
         }
     }
+    function arc(r) {   // st, q
+        C.push(0)
+        for (let i=0; i<t; i++) {
+            C.dup(t+1); // q, 0, st, q
+            // C.push(toHex256(S[(t*2-1]*r+j));  // K, q, st, q
+            C.push(toHex256(S[(t*2-1)*r+i]));  // K, q, st, q
+            C.dup(2+i); // st[i], K, q, st, q
+            C.addmod(); // newSt[i], st, q
+            C.pop();
+        }
+    }
 
     function sigma(p) {
         // sq, q
@@ -136,6 +147,7 @@ export function createCode(nInputs) {
 
     C.push(0);
 
+    // first full rounds
     ark(0);
     // state = state.map((a, i) => F.add(a, C[i]));
     for (let r = 0; r < nRoundsF/2-1; r++) {
@@ -150,36 +162,53 @@ export function createCode(nInputs) {
         C.mstore();
         C.jmp("mix");
         C.label(strLabel);
-
     }
 
+    // another full round with modifications
     for (let j=0; j<t; j++) {
         sigma(j);
-        ark(nRoundsF/2)
+        ark(nRoundsF/2) // matches below?: 
     }
-
     const strLabel = "aferMix_full";
     C._pushLabel(strLabel);
     C.push(0);
     C.mstore();
     C.jmp("mix");
     C.label(strLabel);
+    // another full round should match implementation below 
+    // state = state.map(a => pow5(a));
+    // state = state.map((a, i) => F.add(a, C[(nRoundsF/2-1 +1)* t +i]));
+    // state = state.map((_, i) =>
+    //     state.reduce((acc, a, j) => F.add(acc, F.mul(P[j][i], a)), F.zero)
+    // );
 
+    // partial rounds
+    for (let r = 0; r < nRoundsP; r++) {
+        sigma(0); // sq, q
 
+        // begin add C[(nRoundsF/2 +1)*t + r]
+        C.dup(t);  // q, sq, q
+        C.push(toHex256(C[(nRoundsF/2+1)*t+r]));  // C, q, st, q
+        C.dup(2); // st[0], K, q, st, q
+        C.addmod(); // aux, st, q
+        C.swap(1); // xx, st, q
+        C.pop(); // st, q
 
-    // for (let r = 0; r < nRoundsP; r++) {
-    //     state[0] = pow5(state[0]);
-    //     state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r]);
-    //
-    //
-    //     const s0 = state.reduce((acc, a, j) => {
-    //         return F.add(acc, F.mul(S[(t*2-1)*r+j], a));
-    //     }, F.zero);
-    //     for (let k=1; k<t; k++) {
-    //         state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]   ));
-    //     }
-    //     state[0] =s0;
-    // }
+        // should be right until here
+        //
+        // -----------------------
+
+        // TODO replicate behaviour in assembly
+        // const s0 = state.reduce((acc, a, j) => {
+        //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+        //     console.log("hey:)
+        //     return val
+        // }, F.zero);
+        // for (let k=1; k<t; k++) {
+        //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]));
+        // }
+        // state[0] =s0;
+    }
 
 
     // Old
