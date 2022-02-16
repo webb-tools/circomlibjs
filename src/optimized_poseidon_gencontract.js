@@ -11,10 +11,6 @@ import poseidonConstants from "./poseidon_constants_opt.js";
 
 const opt = unstringifyBigInts(poseidonConstants);
 
-const K = opt.C[t - 2];
-const S = opt.S[t - 2];
-const M = opt.M[t - 2];
-const P = opt.P[t - 2];
 
 const N_ROUNDS_F = 8;
 const N_ROUNDS_P = [56, 57, 56, 60, 60, 63, 64, 63];
@@ -32,14 +28,19 @@ export function createCode(nInputs) {
     const nRoundsF = N_ROUNDS_F;
     const nRoundsP = N_ROUNDS_P[t - 2];
 
+    const K = opt.C[t - 2];
+    const S = opt.S[t - 2];
+    const M = opt.M[t - 2];
+    const P = opt.P[t - 2];
+
     const C = new Contract();
 
     function saveM() {
         for (let i=0; i<t; i++) {
             for (let j=0; j<t; j++) {
-                C.push(toHex256(M[t-2][i][j]));
-                C.push((1+i*t+j)*32);
-                C.mstore();
+                C.push(toHex256(M[t-2][i][j])); // val
+                C.push((1+i*t+j)*32); // address, val
+                C.mstore(); //
             }
         }
     }
@@ -47,7 +48,7 @@ export function createCode(nInputs) {
     function ark(r) {   // st, q
         for (let i=0; i<t; i++) {
             C.dup(t); // q, st, q
-            C.push(toHex256(K[t-2][r*t+i]));  // K, q, st, q
+            C.push(toHex256(K[r*t+i]));  // K, q, st, q
             C.dup(2+i); // st[i], K, q, st, q
             C.addmod(); // newSt[i], st, q
             C.swap(1 + i); // xx, st, q
@@ -84,7 +85,7 @@ export function createCode(nInputs) {
                 } else {
                     C.dup(1+i+t);    // q, acc, newSt, oldSt, q
                     C.push((1+i*t+j)*32);
-                    C.mload();      // M, q, acc, newSt, oldSt, q
+                    C.mload();      // m[i, j], q, acc, newSt, oldSt, q
                     C.dup(3+i+j);    // oldSt[j], M, q, acc, newSt, oldSt, q
                     C.mulmod();      // aux, acc, newSt, oldSt, q
                     C.dup(2+i+t);    // q, aux, acc, newSt, oldSt, q
@@ -98,7 +99,7 @@ export function createCode(nInputs) {
             C.pop();
         }
         C.push(0);
-        C.mload();
+        C.mload(); //label
         C.jmp();
     }
 
@@ -135,8 +136,56 @@ export function createCode(nInputs) {
 
     C.push(0);
 
+    ark(0);
+    // state = state.map((a, i) => F.add(a, C[i]));
+    for (let r = 0; r < nRoundsF/2-1; r++) {
+        for (let j=0; j<t; j++) {
+            sigma(j);
+        }
+        ark(r+1);
+
+        const strLabel = "aferMix"+r;
+        C._pushLabel(strLabel);
+        C.push(0);
+        C.mstore();
+        C.jmp("mix");
+        C.label(strLabel);
+
+    }
+
+    for (let j=0; j<t; j++) {
+        sigma(j);
+        ark(nRoundsF/2)
+    }
+
+    const strLabel = "aferMix_full";
+    C._pushLabel(strLabel);
+    C.push(0);
+    C.mstore();
+    C.jmp("mix");
+    C.label(strLabel);
+
+
+
+    // for (let r = 0; r < nRoundsP; r++) {
+    //     state[0] = pow5(state[0]);
+    //     state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r]);
+    //
+    //
+    //     const s0 = state.reduce((acc, a, j) => {
+    //         return F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+    //     }, F.zero);
+    //     for (let k=1; k<t; k++) {
+    //         state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]   ));
+    //     }
+    //     state[0] =s0;
+    // }
+
+
+    // Old
     for (let i=0; i<nRoundsF+nRoundsP; i++) {
         ark(i);
+        // state = state.map((a, i) => F.add(a, C[t - 2][r * t + i]));
         if ((i<nRoundsF/2) || (i>=nRoundsP+nRoundsF/2)) {
             for (let j=0; j<t; j++) {
                 sigma(j);
