@@ -244,10 +244,10 @@ export function createCode(nInputs) {
             } else {
                 C.dup(t+1); // q, acc, st, q
                 C.push(toHex256(S[(t*2-1)*r + i])); // S[i], q, acc, st, q 
-                C.dup(2+i); // st[i], S[i] q, acc, st, q
+                C.dup(3+i); // st[i], S[i] q, acc, st, q
                 C.mulmod(); // aux, acc, st, q
-                C.dup(2+i+t); // q, aux, acc, st, q
-                C.swap(2); // acc, aux, q, st, q
+                C.dup(3+i+t); // q, aux, acc, st, q
+                C.swap(3); // acc, aux, q, st, q
                 C.addmod(); // acc, st, q
             }
         }
