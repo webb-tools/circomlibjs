@@ -29,6 +29,7 @@ export function createCode(nInputs) {
     const nRoundsP = N_ROUNDS_P[t - 2];
 
     const K = opt.C[t - 2];
+    // K in assembly = C in javascript !!
     const S = opt.S[t - 2];
     const M = opt.M[t - 2];
     const P = opt.P[t - 2];
@@ -57,6 +58,7 @@ export function createCode(nInputs) {
     function ark(r) {   // st, q
         for (let i=0; i<t; i++) {
             C.dup(t); // q, st, q
+            // K in assembly = C in javascript !!
             C.push(toHex256(K[r*t+i]));  // K, q, st, q
             C.dup(2+i); // st[i], K, q, st, q
             C.addmod(); // newSt[i], st, q
@@ -176,7 +178,7 @@ export function createCode(nInputs) {
 
     C.push(0);
 
-    // first full rounds
+    // Begin first full rounds
     ark(0);
     // state = state.map((a, i) => F.add(a, C[i]));
     for (let r = 0; r < nRoundsF/2-1; r++) {
@@ -196,8 +198,9 @@ export function createCode(nInputs) {
     // another full round with modifications
     for (let j=0; j<t; j++) {
         sigma(j);
-        ark(nRoundsF/2) // matches below?: 
     }
+    ark(nRoundsF/2) // matches below?: 
+
     const strLabel = "after_pix";
     C._pushLabel(strLabel);
     C.push(0);
@@ -211,29 +214,35 @@ export function createCode(nInputs) {
     //     state.reduce((acc, a, j) => F.add(acc, F.mul(P[j][i], a)), F.zero)
     // );
 
-    // partial rounds
+    // Begin partial rounds
     for (let r = 0; r < nRoundsP; r++) {
         sigma(0); // sq, q
 
         // begin state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r])
         C.dup(t);  // q, sq, q
-        C.push(toHex256(C[(nRoundsF/2+1)*t+r]));  // C, q, st, q
+        // K in assembly = C in javascript !!
+        C.push(toHex256(K[(nRoundsF/2+1)*t+r]));  // K, q, st, q
         C.dup(2); // st[0], K, q, st, q
         C.addmod(); // aux, st, q
         C.swap(1); // xx, st, q
         C.pop(); // st, q
 
-        // should be right until here
         
+        // begin
+        // const s0 = state.reduce((acc, a, j) => {
+        //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
+        //     console.log("hey:)
+        //     return val
+        // }, F.zero);
         for(let i = 0; i < t; i++) {
             if (i == 0) {
                 C.dup(t); // q, st, q
-                C.push(toHex256(S[(t*2-1) * r+i])); // S[i], q, st, q
+                C.push(toHex256(S[(t*2 - 1)*r + i])); // S[i], q, st, q
                 C.dup(2+i); // st[i], S[i] q, st, q
                 C.mulmod(); // acc, st, q
             } else {
                 C.dup(t+1); // q, acc, st, q
-                C.push(toHex256(S[(t*2-1) * r+i])); // S[i], q, acc, st, q
+                C.push(toHex256(S[(t*2-1)*r + i])); // S[i], q, acc, st, q 
                 C.dup(2+i); // st[i], S[i] q, acc, st, q
                 C.mulmod(); // aux, acc, st, q
                 C.dup(2+i+t); // q, aux, acc, st, q
@@ -241,22 +250,92 @@ export function createCode(nInputs) {
                 C.addmod(); // acc, st, q
             }
         }
-        // const s0 = state.reduce((acc, a, j) => {
-        //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
-        //     console.log("hey:)
-        //     return val
-        // }, F.zero);
         //
-        // The s0 declaration should match above for
-        //
-        // TODO replicate behaviour in assembly
+        // should be right until here
+        
+
+        // begin
         // for (let k=1; k<t; k++) {
         //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]));
         // }
+        for(let k = 1; k < t; k++) {
+            C.dup(t+1); // q, newSt0 st, q
+            C.dup(0); // q, q, newSt0, st, q
+            C.push(toHex256(S[(t*2-1)*r+t+k-1])); // S, q, q, newSt0 st, q
+            C.dup(4); // st[0], S, q, q, newSt0, st, q
+            C.mulmod(); // aux, q, newSt0, st, q
+            C.dup(3+k); // st[k], S, q, newSt0, st, q
+            C.addmod(); // newSt, newSt0, st, q
+            C.swap(2+k); // xx, newSt0, st, q
+            C.pop(); // newSt0, st, q
+        }
+
+        // begin
         // state[0] =s0;
+        C.swap(1); // xx, st, q
+        C.pop(); // st, q
     }
 
-    // Old
+    // Begin
+//state = state.map((a, i) => F.add(a, C[ (nRoundsF/2 +1)*t + nRoundsP + r*t + i ]));
+//state = state.map((a, i) => F.add(a, C[(r + 1)* t +i]));
+    //     state = state.map((_, i) =>
+    //         state.reduce((acc, a, j) => F.add(acc, F.mul(M[j][i], a)), F.zero)
+    //     );
+    // }
+    // }
+
+    // Begin final rounds
+    // K in assembly = C in javascript !!
+    for(let r = 0; r < nRoundsF/2-1; r++) {
+        for (let i=0; i<t; i++) {
+            // Begin map[i]
+            // state = state.map(a => pow5(a));
+            sigma(i); // st, q
+
+
+            // Begin map[i]
+        // state.map((a, i) => F.add(a, C[(nRoundsF/2 +1)*t + nRoundsP + r*t + i ]));
+            C.dup(t); // q, st, q
+            C.push(toHex256(K[(nRoundsF/2+1)*t + nRoundsP + r*t + i]));  // K, q, st, q
+            C.dup(2+i); // st[i], K, q, st, q
+            C.addmod(); // newSt[i], st, q
+            C.swap(1 + i); // xx, st, q
+            C.pop(); // st, q
+        }
+        // Begin
+        // state = state.map((_, i) =>
+        //     state.reduce((acc, a, j) => F.add(acc, F.mul(M[j][i], a)), F.zero)
+        // );
+        const strLabel = "aferMix"+nRoundsF/2+nRoundsP+r;
+        C._pushLabel(strLabel);
+        C.push(0);
+        C.mstore();
+        C.jmp("mix"); // multiply by M
+        C.label(strLabel);
+    }
+    // Begin
+    // state = state.map(a => pow5(a));
+    // state = state.map((_, i) =>
+    //     state.reduce((acc, a, j) => F.add(acc, F.mul(M[j][i], a)), F.zero)
+    // );
+    //
+    // return state[0];
+    for(let i = 0; i < t; i++) {
+        sigma(i); // st, q
+    }
+    const strLabel = "aferMix_final";
+    C._pushLabel(strLabel);
+    C.push(0);
+    C.mstore();
+    C.jmp("mix"); // multiply by M
+    C.label(strLabel);
+
+    C.push("0x00");
+    C.mstore();     // Save it to pos 0;
+    C.push("0x20");
+    C.push("0x00");
+    C.return();
     for (let i=0; i<nRoundsF+nRoundsP; i++) {
         ark(i);
         // state = state.map((a, i) => F.add(a, C[t - 2][r * t + i]));
@@ -284,6 +363,7 @@ export function createCode(nInputs) {
     mix();
 
     return C.createTxData();
+}
 }
 
 export function generateABI(nInputs) {
