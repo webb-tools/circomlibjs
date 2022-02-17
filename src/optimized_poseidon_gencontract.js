@@ -38,7 +38,16 @@ export function createCode(nInputs) {
     function saveM() {
         for (let i=0; i<t; i++) {
             for (let j=0; j<t; j++) {
-                C.push(toHex256(M[t-2][i][j])); // val
+                C.push(toHex256(M[i][j])); // val
+                C.push((1+i*t+j)*32); // address, val
+                C.mstore(); //
+            }
+        }
+    }
+    function saveP() {
+        for (let i=t; i<2*t; i++) {
+            for (let j=t; j<2*t; j++) {
+                C.push(toHex256(P[i][j])); // val
                 C.push((1+i*t+j)*32); // address, val
                 C.mstore(); //
             }
@@ -72,7 +81,38 @@ export function createCode(nInputs) {
         C.pop();      // newst, q
     }
 
-    function mix() {
+    function pix() { // matrix multiplication per P
+        C.label("pix");
+        for (let i=0; i<t; i++) {
+            for (let j=0; j<t; j++) {
+                if (j==0) {
+                    C.dup(i+t);      // q, newSt, oldSt, q
+                    C.push((1+(i+t)*t+(j+t))*32);
+                    C.mload();      // M, q, newSt, oldSt, q
+                    C.dup(2+i+j);    // oldSt[j], M, q, newSt, oldSt, q
+                    C.mulmod();      // acc, newSt, oldSt, q
+                } else {
+                    C.dup(1+i+t);    // q, acc, newSt, oldSt, q
+                    C.push((1+(i+t)*t+(j+t))*32);
+                    C.mload();      // m[i, j], q, acc, newSt, oldSt, q
+                    C.dup(3+i+j);    // oldSt[j], M, q, acc, newSt, oldSt, q
+                    C.mulmod();      // aux, acc, newSt, oldSt, q
+                    C.dup(2+i+t);    // q, aux, acc, newSt, oldSt, q
+                    C.swap(2);       // acc, aux, q, newSt, oldSt, q
+                    C.addmod();      // acc, newSt, oldSt, q
+                }
+            }
+        }
+        for (let i=0; i<t; i++) {
+            C.swap((t -i) + (t -i-1));
+            C.pop();
+        }
+        C.push(0);
+        C.mload(); //label
+        C.jmp();
+    }
+
+    function mix() { // matrix multiplication per M
         C.label("mix");
         for (let i=0; i<t; i++) {
             for (let j=0; j<t; j++) {
@@ -121,6 +161,7 @@ export function createCode(nInputs) {
     C.label("start");
 
     saveM();
+    saveP();
 
     C.push("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");  // q
 
@@ -148,7 +189,7 @@ export function createCode(nInputs) {
         C._pushLabel(strLabel);
         C.push(0);
         C.mstore();
-        C.jmp("mix");
+        C.jmp("mix"); // multiply per M
         C.label(strLabel);
     }
 
@@ -157,11 +198,11 @@ export function createCode(nInputs) {
         sigma(j);
         ark(nRoundsF/2) // matches below?: 
     }
-    const strLabel = "aferMix_full";
+    const strLabel = "after_pix";
     C._pushLabel(strLabel);
     C.push(0);
     C.mstore();
-    C.jmp("mix");
+    C.jmp("pix"); // multiply per P
     C.label(strLabel);
     // another full round should match implementation below 
     // state = state.map(a => pow5(a));
@@ -174,7 +215,7 @@ export function createCode(nInputs) {
     for (let r = 0; r < nRoundsP; r++) {
         sigma(0); // sq, q
 
-        // begin add C[(nRoundsF/2 +1)*t + r]
+        // begin state[0] = F.add(state[0], C[(nRoundsF/2 +1)*t + r])
         C.dup(t);  // q, sq, q
         C.push(toHex256(C[(nRoundsF/2+1)*t+r]));  // C, q, st, q
         C.dup(2); // st[0], K, q, st, q
@@ -183,13 +224,32 @@ export function createCode(nInputs) {
         C.pop(); // st, q
 
         // should be right until here
-
-        // TODO replicate behaviour in assembly
+        
+        for(let i = 0; i < t; i++) {
+            if (i == 0) {
+                C.dup(t); // q, st, q
+                C.push(toHex256(S[(t*2-1) * r+i])); // S[i], q, st, q
+                C.dup(2+i); // st[i], S[i] q, st, q
+                C.mulmod(); // acc, st, q
+            } else {
+                C.dup(t+1); // q, acc, st, q
+                C.push(toHex256(S[(t*2-1) * r+i])); // S[i], q, acc, st, q
+                C.dup(2+i); // st[i], S[i] q, acc, st, q
+                C.mulmod(); // aux, acc, st, q
+                C.dup(2+i+t); // q, aux, acc, st, q
+                C.swap(2); // acc, aux, q, st, q
+                C.addmod(); // acc, st, q
+            }
+        }
         // const s0 = state.reduce((acc, a, j) => {
         //     let val = F.add(acc, F.mul(S[(t*2-1)*r+j], a));
         //     console.log("hey:)
         //     return val
         // }, F.zero);
+        //
+        // The s0 declaration should match above for
+        //
+        // TODO replicate behaviour in assembly
         // for (let k=1; k<t; k++) {
         //     state[k] = F.add(state[k], F.mul(state[0], S[(t*2-1)*r+t+k-1]));
         // }
